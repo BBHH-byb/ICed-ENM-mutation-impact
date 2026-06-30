@@ -1,5 +1,7 @@
 # ICed-ENM Mutation Impact
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21067480.svg)](https://doi.org/10.5281/zenodo.21067480)
+
 Internal-coordinate elastic network model tools for normal mode analysis and
 mutation impact scoring.
 
