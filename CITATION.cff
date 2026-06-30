@@ -1,0 +1,29 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite the associated bioRxiv preprint."
+title: "ICed-ENM-based mutation impact analysis"
+authors:
+  - family-names: Lee
+    given-names: Byung Ho
+  - family-names: Scaramozzino
+    given-names: Domenico
+  - family-names: Piticchio
+    given-names: Serena
+  - family-names: Orellana
+    given-names: Laura
+license: BSD-3-Clause
+preferred-citation:
+  type: article
+  title: "Mutation-induced reshaping of protein conformational dynamics predicted by a coarse-grained modeling framework"
+  authors:
+    - family-names: Lee
+      given-names: Byung Ho
+    - family-names: Scaramozzino
+      given-names: Domenico
+    - family-names: Piticchio
+      given-names: Serena
+    - family-names: Orellana
+      given-names: Laura
+  year: 2026
+  date-released: 2026-03-29
+  doi: 10.64898/2026.03.29.715126
+  url: "https://doi.org/10.64898/2026.03.29.715126"

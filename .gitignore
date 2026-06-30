@@ -1,0 +1,30 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+*.o
+*.mod
+*.dSYM/
+
+# Build outputs
+/bin/
+
+# ICed-ENM NMA outputs
+*_eval.txt
+*_evec*.txt
+*_RMSF*.txt
+*_ref_CA.pdb
+*_ref_CC.pdb
+*_variance*.txt
+variance.txt
+variance_cumulative.txt
+movie_mode*_*.pdb
+
+# Mutation-impact outputs
+mutant_pdbs/
+evals/
+logs/
+*_impact_scores.tsv
+*_impact_scores.failed.txt
+/1ba2_A/
+/1CRN_A/
+/examples/1CRN_A/

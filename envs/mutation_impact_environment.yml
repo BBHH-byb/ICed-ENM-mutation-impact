@@ -1,0 +1,7 @@
+name: iced-enm-mutation
+channels:
+  - salilab
+  - conda-forge
+dependencies:
+  - python=3.11
+  - modeller
