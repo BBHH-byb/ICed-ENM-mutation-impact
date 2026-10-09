@@ -194,14 +194,27 @@ enddo
 call omp_set_num_threads(i_ncore)
 call openblas_set_num_threads(i_ncore)
 i_nline = 0
-OPEN (1, file = PDB)
+OPEN (1, file = trim(PDB), action="READ", status="old", iostat=ios)
+if (ios /= 0) then
+    write(*,'(A,A)') "Error: cannot open PDB file: ", trim(PDB)
+    stop 1, quiet=.true.
+endif
 DO
     READ (1,*, END=10)
     i_nline = i_nline + 1
 END DO
 10 CLOSE (1)
+if (i_nline <= 0) then
+    write(*,'(A,A)') "Error: PDB file is empty: ", trim(PDB)
+    stop 1, quiet=.true.
+endif
 if (.not.allocated(refined_PDB)) allocate(refined_PDB(i_nline))
 call refine_PDB(PDB,chain,refined_PDB,i_nline,n_refined)
+if (n_refined <= 0) then
+    write(*,'(A,A,A,A)') "Error: no non-hydrogen ATOM records found for chain '", &
+        trim(chain), "' in PDB file: ", trim(PDB)
+    stop 1, quiet=.true.
+endif
 if (.not.allocated(arr_coordi_pre)) allocate(arr_coordi_pre(n_refined,3))
 if (.not.allocated(arr_atom_type_pre)) allocate(arr_atom_type_pre(n_refined,3))
 if (.not.allocated(arr_resid_type_pre)) allocate(arr_resid_type_pre(n_refined))
@@ -212,6 +225,11 @@ if (.not.allocated(ref_PDB_CA)) allocate(ref_PDB_CA(n_refined+1))
 
 call read_PDB(refined_PDB,n_refined,arr_coordi_pre,arr_atom_type_pre,arr_resid_type_pre,arr_chain_label_pre,&
 arr_chain_index_pre,i_natom,i_nCA,ref_PDB,ref_PDB_CA)
+if (i_natom <= 0 .or. i_nCA <= 0) then
+    write(*,'(A,A,A,A)') "Error: selected chain '", trim(chain), &
+        "' does not contain enough N/CA/C/side-chain atoms for NMA in PDB file: ", trim(PDB)
+    stop 1, quiet=.true.
+endif
 
 if (.not.allocated(arr_coordi)) allocate(arr_coordi(i_natom,3))
 if (.not.allocated(arr_atom_type)) allocate(arr_atom_type(i_natom,3))
@@ -733,7 +751,7 @@ if (write_CA_raw) then
 endif
 
 ncols = ubound(Q_CA_orthonormal, 2)
-write(fmt, '(A,I0,A)') '(', ncols, 'F10.6)'
+write(fmt, '(A,I0,A)') '(', ncols, 'F14.10)'
 do i=1,3*i_nCA
     write(112,fmt) Q_CA_orthonormal(i,:)
 enddo
@@ -2157,11 +2175,12 @@ end subroutine
 Subroutine eig_func_part_dsygvx(K_ic_mat,T_ic_mat,i_dof,Q,D,lowest_num)
     character JOBZ, UPLO, range
     integer :: ITYPE,LDA,LDB,LDZ,N,INFO,i_dof,il,iu,lowest_num,i,j,LWORK
+    integer :: M_found
     double precision, dimension(:,:) :: T_ic_mat
     double precision, dimension(:,:) :: K_ic_mat
-    double precision, dimension(i_dof) :: D
-    double precision, dimension(:,:) :: Q
-    double precision, dimension(:), allocatable :: WORK
+    double precision, dimension(:), intent(out) :: D
+    double precision, dimension(:,:), intent(out) :: Q
+    double precision, dimension(:), allocatable :: WORK, W_all
     integer, dimension(i_dof*5) :: IWORK
     integer, dimension(i_dof) :: IFAIL
     double precision :: vl, vu, abstol, WORKQ(1)
@@ -2170,16 +2189,103 @@ Subroutine eig_func_part_dsygvx(K_ic_mat,T_ic_mat,i_dof,Q,D,lowest_num)
     N=i_dof; LDA=N; LDB=N
     LDZ=i_dof; JOBZ = 'V' ;UPLO = 'U'
     vl=0.0; vu=0.0; abstol = 2.0d0 * dlamch('S'); il=1; iu=lowest_num
+    allocate(W_all(N)); W_all(:)=0.0d0
     !example of DSYGV: https://github.com/numericalalgorithmsgroup/LAPACK_Examples/blob/master/examples/source/dsygv_example.f90
-    LWORK = -1
+    LWORK = -1; M_found = 0
     call dsygvx(ITYPE,JOBZ,range,UPLO,N,K_ic_mat,LDA,T_ic_mat,LDB,vl,vu,il,iu,&
-                abstol,lowest_num,D,Q,LDZ,WORKQ,LWORK,IWORK,IFAIL,INFO)
-    if (INFO .ne. 0) return
+                abstol,M_found,W_all,Q,LDZ,WORKQ,LWORK,IWORK,IFAIL,INFO)
+    
+    if (INFO /= 0) then
 
-    LWORK = int(WORKQ(1))
+        write(*,*) "========================================"
+        write(*,*) "DSYGVX workspace query FAILED"
+        write(*,*) "INFO =", INFO
+        write(*,*) "N    =", N
+        write(*,*) "IL/IU=", il, iu
+        write(*,*) "========================================"
+
+        stop 1
+
+    endif
+
+    LWORK = max(1,int(WORKQ(1)))
     allocate(WORK(LWORK))
+
+    !Actual calculation
+    INFO = 0
+    M_found = 0
+    IFAIL(:) = 0
+
     call dsygvx(ITYPE,JOBZ,range,UPLO,N,K_ic_mat,LDA,T_ic_mat,LDB,vl,vu,il,iu,&
-                abstol,lowest_num,D,Q,LDZ,WORK,LWORK,IWORK,IFAIL,INFO)
+                abstol,M_found,W_all,Q,LDZ,WORK,LWORK,IWORK,IFAIL,INFO)
+    ! ========================================================
+    ! Detailed failure diagnostics
+    ! ========================================================
+
+    if (INFO /= 0) then
+
+        write(*,*) ""
+        write(*,*) "========================================"
+        write(*,*) "DSYGVX FAILED"
+        write(*,*) "========================================"
+
+        write(*,*) "INFO        =", INFO
+        write(*,*) "N           =", N
+        write(*,*) "requested   =", lowest_num
+        write(*,*) "M_found     =", M_found
+
+        if (INFO < 0) then
+
+            write(*,*) "Reason:"
+            write(*,*) "Illegal argument number =", -INFO
+
+        else if (INFO <= N) then
+
+            write(*,*) "Reason:"
+            write(*,*) "Eigenvector convergence failure."
+            write(*,*) "Number failed =", INFO
+
+            write(*,*) "IFAIL indices:"
+
+            do i = 1, INFO
+                write(*,*) IFAIL(i)
+            enddo
+
+        else
+
+            write(*,*) "Reason:"
+            write(*,*) "T matrix is NOT positive definite."
+            write(*,*) "Cholesky failed at leading minor =", INFO-N
+
+        endif
+
+        write(*,*) "========================================"
+
+        stop 1
+
+    endif
+    
+    ! ========================================================
+    ! Check number of modes
+    ! ========================================================
+
+    if (M_found /= lowest_num) then
+
+        write(*,*) "========================================"
+        write(*,*) "DSYGVX returned wrong number of modes"
+        write(*,*) "requested =", lowest_num
+        write(*,*) "returned  =", M_found
+        write(*,*) "========================================"
+
+        stop 1
+
+    endif
+
+    D(1:lowest_num) = W_all(1:lowest_num)
+
+    deallocate(WORK)
+    deallocate(W_all)
+
 end subroutine
 !***************************************************************************************************
 subroutine ICtoCC(arr_mass,Q,arr_coordi,arr_coordi_IC,arr_atom_num,PA_mat &
